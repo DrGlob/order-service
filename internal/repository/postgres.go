@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
-	"order-service/internal/domain"
+	// "o-serv/internal/domain"
 	_ "github.com/lib/pq"
 )
 
