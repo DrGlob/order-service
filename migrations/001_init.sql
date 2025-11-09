@@ -1,65 +1,81 @@
--- Создаем таблицу для основных данных заказа
+-- Создание таблицы заказов
 CREATE TABLE IF NOT EXISTS orders (
     order_uid VARCHAR(255) PRIMARY KEY,
-    track_number VARCHAR(255),
-    entry VARCHAR(50),
-    locale VARCHAR(10),
+    track_number VARCHAR(255) UNIQUE NOT NULL,
+    entry VARCHAR(50) NOT NULL,
+    locale VARCHAR(10) NOT NULL,
     internal_signature VARCHAR(255),
-    customer_id VARCHAR(255),
-    delivery_service VARCHAR(100),
-    shardkey VARCHAR(50),
-    sm_id INTEGER,
-    date_created TIMESTAMP WITH TIME ZONE,
-    oof_shard VARCHAR(50)
+    customer_id VARCHAR(255) NOT NULL,
+    delivery_service VARCHAR(255) NOT NULL,
+    shardkey VARCHAR(10) NOT NULL,
+    sm_id INTEGER NOT NULL,
+    date_created TIMESTAMP WITH TIME ZONE NOT NULL,
+    oof_shard VARCHAR(10) NOT NULL
 );
 
--- Создаем таблицу для данных доставки
+-- Создание таблицы доставки
 CREATE TABLE IF NOT EXISTS deliveries (
     id SERIAL PRIMARY KEY,
-    order_uid VARCHAR(255) REFERENCES orders(order_uid),
-    name VARCHAR(255),
-    phone VARCHAR(50),
-    zip VARCHAR(50),
-    city VARCHAR(100),
-    address TEXT,
-    region VARCHAR(100),
-    email VARCHAR(255)
+    order_uid VARCHAR(255) REFERENCES orders(order_uid) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,
+    phone VARCHAR(50) NOT NULL,
+    zip VARCHAR(50) NOT NULL,
+    city VARCHAR(255) NOT NULL,
+    address VARCHAR(255) NOT NULL,
+    region VARCHAR(255) NOT NULL,
+    email VARCHAR(255) NOT NULL
 );
 
--- Создаем таблицу для данных оплаты
+-- Создание таблицы платежей
 CREATE TABLE IF NOT EXISTS payments (
-    transaction VARCHAR(255) PRIMARY KEY,
-    order_uid VARCHAR(255) REFERENCES orders(order_uid),
+    id SERIAL PRIMARY KEY,
+    order_uid VARCHAR(255) REFERENCES orders(order_uid) ON DELETE CASCADE,
+    transaction VARCHAR(255) UNIQUE NOT NULL,
     request_id VARCHAR(255),
-    currency VARCHAR(10),
-    provider VARCHAR(100),
-    amount INTEGER,
-    payment_dt BIGINT,
-    bank VARCHAR(100),
-    delivery_cost INTEGER,
-    goods_total INTEGER,
-    custom_fee INTEGER
+    currency VARCHAR(10) NOT NULL,
+    provider VARCHAR(100) NOT NULL,
+    amount INTEGER NOT NULL,
+    payment_dt BIGINT NOT NULL,
+    bank VARCHAR(100) NOT NULL,
+    delivery_cost INTEGER NOT NULL,
+    goods_total INTEGER NOT NULL,
+    custom_fee INTEGER NOT NULL
 );
 
--- Создаем таблицу для товаров
+-- Создание таблицы товаров
 CREATE TABLE IF NOT EXISTS items (
     id SERIAL PRIMARY KEY,
-    order_uid VARCHAR(255) REFERENCES orders(order_uid),
-    chrt_id BIGINT,
-    track_number VARCHAR(255),
-    price INTEGER,
-    rid VARCHAR(255),
-    name VARCHAR(255),
-    sale INTEGER,
-    size VARCHAR(50),
-    total_price INTEGER,
-    nm_id BIGINT,
-    brand VARCHAR(255),
-    status INTEGER
+    order_uid VARCHAR(255) REFERENCES orders(order_uid) ON DELETE CASCADE,
+    chrt_id INTEGER NOT NULL,
+    track_number VARCHAR(255) NOT NULL,
+    price INTEGER NOT NULL,
+    rid VARCHAR(255) NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    sale INTEGER NOT NULL,
+    size VARCHAR(50) NOT NULL,
+    total_price INTEGER NOT NULL,
+    nm_id INTEGER NOT NULL,
+    brand VARCHAR(255) NOT NULL,
+    status INTEGER NOT NULL
 );
 
--- Создаем индексы для быстрого поиска
-CREATE INDEX IF NOT EXISTS idx_orders_order_uid ON orders(order_uid);
+-- ALTER TABLE deliveries ADD CONSTRAINT deliveries_order_uid_key UNIQUE (order_uid);
+-- ALTER TABLE payments ADD CONSTRAINT payments_order_uid_key UNIQUE (order_uid);
+
+-- fix_constraints.sql
+ALTER TABLE deliveries DROP CONSTRAINT IF EXISTS deliveries_order_uid_key;
+ALTER TABLE deliveries ADD CONSTRAINT deliveries_order_uid_key UNIQUE (order_uid);
+
+ALTER TABLE payments DROP CONSTRAINT IF EXISTS payments_order_uid_key;
+ALTER TABLE payments ADD CONSTRAINT payments_order_uid_key UNIQUE (order_uid);
+
+-- Создание индексов для ускорения поиска
+CREATE INDEX IF NOT EXISTS idx_orders_track_number ON orders(track_number);
 CREATE INDEX IF NOT EXISTS idx_deliveries_order_uid ON deliveries(order_uid);
 CREATE INDEX IF NOT EXISTS idx_payments_order_uid ON payments(order_uid);
 CREATE INDEX IF NOT EXISTS idx_items_order_uid ON items(order_uid);
+CREATE INDEX IF NOT EXISTS idx_payments_transaction ON payments(transaction);
+
+-- Уникальные ограничения для предотвращения дублирования
+CREATE UNIQUE INDEX IF NOT EXISTS idx_deliveries_unique_order ON deliveries(order_uid);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_unique_order ON payments(order_uid);

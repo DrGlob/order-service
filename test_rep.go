@@ -7,16 +7,14 @@ import (
 	"log"
 	"o-serv/internal/config"
 	"o-serv/internal/repository"
+	"o-serv/internal/domain"
 	"time"
-
 	_ "github.com/lib/pq"
 )
 
 func main() {
-	// Загружаем конфигурацию
 	cfg := config.Load()
 
-	// Подключаемся к БД
 	connStr := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable",
 		cfg.DBUser, cfg.DBPassword, cfg.DBHost, cfg.DBPort, cfg.DBName)
 	
@@ -26,11 +24,10 @@ func main() {
 	}
 	defer db.Close()
 
-	// Проверяем подключение
 	if err := db.Ping(); err != nil {
 		log.Fatal("Failed to ping database:", err)
 	}
-	fmt.Println("✅ Successfully connected to PostgreSQL!")
+	fmt.Println("Successfully connected to PostgreSQL!")
 
 	// Создаем репозиторий
 	repo := repository.NewOrderRepository(db)

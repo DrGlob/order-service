@@ -4,13 +4,15 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
-
+	"o-serv/internal/config"
 	_ "github.com/lib/pq"
 )
 
 func main() {
 	// Подключаемся к PostgreSQL
-	connStr := "postgres://orders_user:orders_password@localhost:5432/orders_db?sslmode=disable"
+	cfg := config.Load()
+	connStr := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable",
+		cfg.DBUser, cfg.DBPassword, cfg.DBHost, cfg.DBPort, cfg.DBName)
 	db, err := sql.Open("postgres", connStr)
 	if err != nil {
 		log.Fatal("Failed to connect to database:", err)
@@ -22,7 +24,7 @@ func main() {
 	if err != nil {
 		log.Fatal("Failed to ping database:", err)
 	}
-	fmt.Println("✅ Successfully connected to PostgreSQL!")
+	fmt.Println("Successfully connected to PostgreSQL!")
 
 	// Проверяем существование таблиц
 	tables := []string{"orders", "deliveries", "payments", "items"}
@@ -35,7 +37,7 @@ func main() {
 			continue
 		}
 		if exists {
-			fmt.Printf("✅ Table %s exists\n", table)
+			fmt.Printf("Table %s exists\n", table)
 		} else {
 			fmt.Printf("❌ Table %s does not exist\n", table)
 		}

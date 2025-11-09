@@ -5,7 +5,8 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
-	// "o-serv/internal/domain"
+	"o-serv/internal/domain"
+
 	_ "github.com/lib/pq"
 )
 
@@ -47,40 +48,32 @@ func (r *OrderRepository) SaveOrder(ctx context.Context, order *domain.Order) er
 		return fmt.Errorf("failed to save order: %w", err)
 	}
 
-	// Сохраняем доставку
+	// Удаляем старую доставку и вставляем новую (без ON CONFLICT)
+	_, err = tx.ExecContext(ctx, "DELETE FROM deliveries WHERE order_uid = $1", order.OrderUID)
+	if err != nil {
+		return fmt.Errorf("failed to delete old delivery: %w", err)
+	}
+
 	_, err = tx.ExecContext(ctx, `
 		INSERT INTO deliveries (order_uid, name, phone, zip, city, address, region, email)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-		ON CONFLICT (order_uid) DO UPDATE SET
-			name = EXCLUDED.name,
-			phone = EXCLUDED.phone,
-			zip = EXCLUDED.zip,
-			city = EXCLUDED.city,
-			address = EXCLUDED.address,
-			region = EXCLUDED.region,
-			email = EXCLUDED.email
 	`, order.OrderUID, order.Delivery.Name, order.Delivery.Phone, order.Delivery.Zip,
 		order.Delivery.City, order.Delivery.Address, order.Delivery.Region, order.Delivery.Email)
 	if err != nil {
 		return fmt.Errorf("failed to save delivery: %w", err)
 	}
 
-	// Сохраняем платеж
+	// Удаляем старый платеж и вставляем новый (без ON CONFLICT)
+	_, err = tx.ExecContext(ctx, "DELETE FROM payments WHERE order_uid = $1", order.OrderUID)
+	if err != nil {
+		return fmt.Errorf("failed to delete old payment: %w", err)
+	}
+
 	_, err = tx.ExecContext(ctx, `
-		INSERT INTO payments (transaction, order_uid, request_id, currency, provider, 
+		INSERT INTO payments (order_uid, transaction, request_id, currency, provider, 
 		                     amount, payment_dt, bank, delivery_cost, goods_total, custom_fee)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-		ON CONFLICT (transaction) DO UPDATE SET
-			request_id = EXCLUDED.request_id,
-			currency = EXCLUDED.currency,
-			provider = EXCLUDED.provider,
-			amount = EXCLUDED.amount,
-			payment_dt = EXCLUDED.payment_dt,
-			bank = EXCLUDED.bank,
-			delivery_cost = EXCLUDED.delivery_cost,
-			goods_total = EXCLUDED.goods_total,
-			custom_fee = EXCLUDED.custom_fee
-	`, order.Payment.Transaction, order.OrderUID, order.Payment.RequestID, order.Payment.Currency,
+	`, order.OrderUID, order.Payment.Transaction, order.Payment.RequestID, order.Payment.Currency,
 		order.Payment.Provider, order.Payment.Amount, order.Payment.PaymentDt, order.Payment.Bank,
 		order.Payment.DeliveryCost, order.Payment.GoodsTotal, order.Payment.CustomFee)
 	if err != nil {
@@ -123,7 +116,7 @@ func (r *OrderRepository) GetOrderByUID(ctx context.Context, orderUID string) (*
 		&order.Shardkey, &order.SmID, &order.DateCreated, &order.OofShard,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get order: %w", err)
 	}
 
 	// Получаем доставку
@@ -136,7 +129,7 @@ func (r *OrderRepository) GetOrderByUID(ctx context.Context, orderUID string) (*
 		&order.Delivery.Email,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get delivery: %w", err)
 	}
 
 	// Получаем платеж
@@ -151,7 +144,7 @@ func (r *OrderRepository) GetOrderByUID(ctx context.Context, orderUID string) (*
 		&order.Payment.CustomFee,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get payment: %w", err)
 	}
 
 	// Получаем items
@@ -161,7 +154,7 @@ func (r *OrderRepository) GetOrderByUID(ctx context.Context, orderUID string) (*
 		FROM items WHERE order_uid = $1
 	`, orderUID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get items: %w", err)
 	}
 	defer rows.Close()
 
@@ -173,7 +166,7 @@ func (r *OrderRepository) GetOrderByUID(ctx context.Context, orderUID string) (*
 			&item.Sale, &item.Size, &item.TotalPrice, &item.NmID, &item.Brand, &item.Status,
 		)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to scan item: %w", err)
 		}
 		items = append(items, item)
 	}
@@ -186,7 +179,7 @@ func (r *OrderRepository) GetOrderByUID(ctx context.Context, orderUID string) (*
 func (r *OrderRepository) GetAllOrders(ctx context.Context) ([]*domain.Order, error) {
 	rows, err := r.db.QueryContext(ctx, "SELECT order_uid FROM orders")
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get order UIDs: %w", err)
 	}
 	defer rows.Close()
 
@@ -194,6 +187,7 @@ func (r *OrderRepository) GetAllOrders(ctx context.Context) ([]*domain.Order, er
 	for rows.Next() {
 		var orderUID string
 		if err := rows.Scan(&orderUID); err != nil {
+			log.Printf("Failed to scan order UID: %v", err)
 			continue
 		}
 		order, err := r.GetOrderByUID(ctx, orderUID)
@@ -202,6 +196,10 @@ func (r *OrderRepository) GetAllOrders(ctx context.Context) ([]*domain.Order, er
 			continue
 		}
 		orders = append(orders, order)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating orders: %w", err)
 	}
 
 	return orders, nil
